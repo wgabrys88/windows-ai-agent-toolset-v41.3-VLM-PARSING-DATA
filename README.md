@@ -1,3 +1,10 @@
+```
+COMPARE FILES WITH THE MOLOSSUS VERSION, I MADE A QUICK FIXES TO IT AND NOT SURE IF THEY ARE INCLUDED HERE
+THIS IS FAST CHECK, THERE WERE ONE LINERS CHANGES BUT SUPERIMPORTANT
+MAKE SURE TO MERGE THEM INTO THIS REPO - IN OVERALL - THIS REPO IS COOKING
+THE PIPELINE.PY is now the ultimate file where we change something,
+no more changes across whole system.
+```
 # AI-Self-Parsing Pipeline (`pipeline.py`)
 
 This repo routes a Vision-Language Model (VLM) through a **pipeline** that produces a stable, app-level format:

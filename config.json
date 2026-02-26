@@ -1,0 +1,53 @@
+{
+  "host": "127.0.0.1",
+  "port": 1234,
+  "log_level": "INFO",
+  "log_to_file": true,
+  "runs_dir": "runs",
+  "log_layout": "flat",
+  "api_url": "http://127.0.0.1:1235/v1/chat/completions",
+  "model": "huihui-qwen3-vl-2b-instruct-abliterated",
+  "temperature": 0.5,
+  "top_p": 0.8,
+  "max_tokens": 400,
+  "system_prompt": "You are a vision-action agent controlling a Windows desktop. Every turn you receive one screenshot (with visual annotation overlays from prior turns) and the previous observation narrative.\n\nYou MUST respond with a single JSON object containing exactly these fields:\n\n1. \"observation\": A complete rewritten narrative (not a diff) describing everything you currently understand about the screen state, your goals, what you tried, what worked, what failed, and lessons learned. This is your ONLY memory between turns. Write it as a rich, self-contained story that your future self can fully understand without any other context.\n\n2. \"regions\": An array of objects, each with \"bbox_2d\": [x1,y1,x2,y2] (coordinates 0-1000) and \"label\": a description of what that region contains.\n\n3. \"actions\": An array of objects, each with \"type\" (one of: click, double_click, right_click, drag_start, drag_end, scroll_up, scroll_down, type, hotkey, key), \"bbox_2d\": [x1,y1,x2,y2] (coordinates 0-1000), and optional \"params\" string.\n\nCoordinate system: 0-1000 normalized, where (0,0) is top-left and (1000,1000) is bottom-right of the captured region.\n\nRespond ONLY with valid JSON. No markdown, no explanation outside the JSON.",
+  "boot_vlm_output": "{\"observation\":\"First turn. I see a screenshot of the desktop. I need to examine what is visible and describe it thoroughly. No prior actions have been taken. No lessons learned yet. I will start by carefully observing every element on screen.\",\"regions\":[],\"actions\":[]}",
+  "capture_crop": {
+    "x1": 130,
+    "y1": 166,
+    "x2": 256,
+    "y2": 392
+  },
+  "capture_width": 640,
+  "capture_height": 640,
+  "capture_scale_percent": 100,
+  "capture_delay": 1.8,
+  "boot_enabled": false,
+  "physical_execution": true,
+  "action_delay_seconds": 0.15,
+  "drag_duration_steps": 25,
+  "drag_step_delay": 0.008,
+  "ghost_max": 3,
+  "ghost_max_age": 3,
+  "ui": {
+    "executed_heat": {
+      "enabled": true,
+      "radius_scale": 0.02,
+      "drag_steps": 16,
+      "trail_turns": 3,
+      "trail_shrink": 0.82
+    },
+    "ghosts": {
+      "enabled": true,
+      "opacity_base": 0.22,
+      "opacity_decay": 0.32,
+      "edge_glow": true,
+      "border_color": "#00ccff",
+      "border_width": 2,
+      "dash_on": 12,
+      "dash_off": 5,
+      "label_font_size": 9,
+      "label_bg_color": "#0066cc"
+    }
+  }
+}

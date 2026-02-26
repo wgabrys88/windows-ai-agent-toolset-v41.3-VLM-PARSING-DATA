@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GhostBuster Slideshow • Simplified Debounced Eval</title>
+<style>
+    body {margin:0;overflow:hidden;background:#000;font-family:sans-serif;color:#fff;}
+    #viewport {width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;position:relative;}
+    #shape {width:500px;height:500px;display:flex;align-items:center;justify-content:center;font-size:120px;font-weight:900;transition:none;}
+    .circle {border-radius:50%;}
+    .square {border-radius:20px;}
+    .triangle {width:0;height:0;border-left:250px solid transparent;border-right:250px solid transparent;border-bottom:430px solid;}
+    .star {clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);}
+    #info {position:absolute;top:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.9);padding:12px 40px;border-radius:8px;font-size:1.8rem;font-weight:700;}
+    #controls {position:absolute;top:20px;right:20px;background:rgba(0,0,0,0.9);padding:12px;border-radius:8px;width:200px;}
+    button {width:100%;margin:6px 0;padding:10px;font-size:1rem;}
+    #log {position:absolute;bottom:20px;left:20px;right:20px;background:rgba(0,0,0,0.9);padding:12px;border-radius:8px;max-height:140px;overflow:auto;font-size:0.9rem;}
+</style>
+</head>
+<body>
+
+<div id="viewport">
+    <div id="info">STATE 1 — RED CIRCLE</div>
+    <div id="shape"></div>
+</div>
+
+<div id="controls">
+    <button onclick="manualNext()">Manual Next</button>
+    <button onclick="chooseLogFile()">Create/Append log.jsonl</button>
+    <button onclick="downloadLog()">Download log.jsonl</button>
+</div>
+
+<div id="log">Log ready</div>
+
+<script>
+const states = [
+    {id:1, name:"STATE 1 — RED CIRCLE",   bg:"#220000", shapeClass:"circle",  shapeColor:"#ff3333", label:"🔴"},
+    {id:2, name:"STATE 2 — GREEN SQUARE", bg:"#002200", shapeClass:"square", shapeColor:"#33ff33", label:"🟩"},
+    {id:3, name:"STATE 3 — YELLOW TRIANGLE", bg:"#222200", shapeClass:"triangle", shapeColor:"#ffff33", label:"🔺"},
+    {id:4, name:"STATE 4 — ORANGE STAR",  bg:"#220022", shapeClass:"star",    shapeColor:"#ff8833", label:"⭐"}
+];
+
+let currentIdx = 0;
+let logEntries = [];
+let logFileHandle = null;
+let debounceTimer = null;
+
+const viewport = document.getElementById('viewport');
+const shape = document.getElementById('shape');
+const info = document.getElementById('info');
+const logEl = document.getElementById('log');
+
+function render() {
+    const s = states[currentIdx];
+    viewport.style.background = s.bg;
+    shape.className = s.shapeClass;
+    shape.style.background = s.shapeColor;
+    shape.textContent = s.label;
+    info.textContent = s.name;
+}
+
+function logAction(actionType) {
+    const now = new Date().toISOString();
+    const s = states[currentIdx];
+    const entry = {
+        timestamp: now,
+        turn: logEntries.length + 1,
+        action: actionType,
+        new_state_id: s.id,
+        new_state_name: s.name
+    };
+    logEntries.push(entry);
+
+    if (logFileHandle) {
+        logFileHandle.createWritable().then(w => {
+            w.seek(w.getSize ? w.getSize() : 0).then(() => {
+                w.write(JSON.stringify(entry) + '\n');
+                w.close();
+            });
+        });
+    }
+
+    logEl.innerHTML = logEntries.slice(-8).map(e =>
+        `<div>${e.timestamp.slice(11,19)} ${e.action} → ${e.new_state_name}</div>`
+    ).join('');
+}
+
+function advance() {
+    currentIdx = (currentIdx + 1) % 4;
+    render();
+    logAction('debounced_advance');
+}
+
+function scheduleAdvance() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(advance, 2000);   // 2 seconds after LAST action
+}
+
+// ANY input resets the 2-second timer
+document.addEventListener('click', e => {
+    if (e.target.closest('#controls')) return;
+    scheduleAdvance();
+});
+
+document.addEventListener('keydown', () => scheduleAdvance());
+document.addEventListener('wheel', () => scheduleAdvance(), {passive:true});
+
+// Manual button = instant (bypasses debounce)
+function manualNext() {
+    clearTimeout(debounceTimer);
+    advance();
+}
+
+// init
+render();
+logAction('init');
+
+// File handling
+async function chooseLogFile() {
+    try {
+        logFileHandle = await window.showSaveFilePicker({suggestedName: 'slideshow_eval_log.jsonl'});
+        const w = await logFileHandle.createWritable();
+        await w.write('// Simplified Debounced Slideshow Log\n');
+        await w.close();
+    } catch(e) {}
+}
+
+function downloadLog() {
+    if (!logEntries.length) return alert('No logs yet');
+    const blob = new Blob([logEntries.map(e=>JSON.stringify(e)).join('\n')], {type:'application/jsonl'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'slideshow_eval_log.jsonl';
+    a.click();
+}
+</script>
+</body>
+</html>

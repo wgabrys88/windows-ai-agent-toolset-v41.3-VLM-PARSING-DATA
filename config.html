@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark"/>
+<title>Franz — Architecture Control</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{color-scheme:dark;--bg:#08080a;--surface:#111116;--card:#16161e;--border:#252530;--accent:#4a9eff;--accent2:#ff6b35;--cyan:#00ccff;--green:#3ecf8e;--warn:#f0a000;--err:#ff4455;--purple:#a070ff;--text:#e8e8f0;--text-dim:#5a5a6e;--text-mid:#8e8ea8;--mono:"Cascadia Code","Fira Code","Consolas",monospace}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg)!important;color:var(--text)!important;font-family:system-ui,-apple-system,sans-serif;font-size:12px}
+input,textarea,select,button{color-scheme:dark}
+#board{width:100vw;height:100vh;position:relative;overflow:auto}
+.node{position:absolute;background:var(--card);border:1.5px solid var(--border);border-radius:10px;display:flex;flex-direction:column;overflow:hidden}
+.node-head{padding:6px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0}
+.node-head .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.node-body{flex:1;overflow:auto;padding:8px 10px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.node textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-family:var(--mono);font-size:10px;width:100%;resize:none;line-height:1.5;flex:1}
+.node textarea.code{font-size:10px;tab-size:4;white-space:pre}
+.fl{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+.fl label{font-size:9px;font-weight:600;color:var(--text-dim);min-width:80px;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}
+.fl input[type="text"],.fl input[type="number"]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px;font-family:var(--mono);font-size:10px;flex:1;min-width:60px}
+.fl input[type="range"]{flex:1;min-width:60px;accent-color:var(--accent)}
+.fl .vl{font-family:var(--mono);font-size:9px;color:var(--accent);min-width:35px;text-align:right}
+.fl input[type="checkbox"]{accent-color:var(--accent);width:14px;height:14px}
+.fl input[type="color"]{width:28px;height:22px;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer;padding:1px}
+svg.arrows{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0}
+.node{z-index:1}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--green);color:#000;padding:8px 18px;border-radius:6px;font-weight:700;font-size:11px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:1000}
+.toast.show{opacity:1}
+.toast.err-toast{background:var(--err)}
+.toolbar{position:fixed;top:12px;right:12px;z-index:100;display:flex;gap:8px;flex-wrap:wrap}
+.toolbar button{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all .15s}
+.toolbar button:hover{border-color:var(--accent);color:var(--accent)}
+.toolbar button.primary{background:var(--accent);color:#000;border-color:var(--accent)}
+.toolbar button.primary:hover{opacity:.85}
+.toolbar button.go{background:var(--green);color:#000;border-color:var(--green)}
+.toolbar button.go:hover{opacity:.85}
+.toolbar button.export{background:var(--purple);color:#000;border-color:var(--purple)}
+.toolbar button.export:hover{opacity:.85}
+.title{position:fixed;top:14px;left:16px;z-index:100;font-size:16px;font-weight:700;color:var(--accent);letter-spacing:-.02em}
+.title span{color:var(--text-dim);font-size:11px;font-weight:400;margin-left:8px;letter-spacing:.02em}
+.note{position:fixed;bottom:20px;left:16px;z-index:100;font-size:9px;color:var(--text-dim);max-width:500px;line-height:1.5}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="title">Franz<span>Architecture Control</span></div>
+<div class="toolbar">
+<button class="primary" id="btn-save">Save All to Server</button>
+<button class="export" id="btn-export">Export Backup</button>
+<button id="btn-reload">Reload from Server</button>
+<button class="go" id="btn-start">▶ Start Loop</button>
+</div>
+<div class="note" id="status-note">Loading...</div>
+<div id="board">
+<svg class="arrows" id="arrows" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6Z" fill="#4a9eff"/></marker></defs>
+</svg>
+
+<div class="node" id="n-boot" style="left:20px;top:60px;width:280px;height:220px;border-color:var(--accent)">
+<div class="node-head" style="color:var(--accent)"><div class="dot" style="background:var(--accent)"></div>BOOT / INJECT</div>
+<div class="node-body">
+<div class="fl"><label>Boot Enabled</label><input type="checkbox" id="f-boot_enabled" checked/></div>
+<div class="fl"><label>Boot VLM Output</label></div>
+<textarea id="f-boot_vlm_output" rows="6" style="height:120px"></textarea>
+</div>
+</div>
+
+<div class="node" id="n-prompt" style="left:20px;top:300px;width:280px;height:300px;border-color:var(--green)">
+<div class="node-head" style="color:var(--green)"><div class="dot" style="background:var(--green)"></div>SYSTEM PROMPT</div>
+<div class="node-body" style="display:flex;flex-direction:column">
+<textarea id="f-system_prompt" class="code" style="flex:1"></textarea>
+</div>
+</div>
+
+<div class="node" id="n-pipeline" style="left:330px;top:60px;width:380px;height:540px;border-color:var(--purple)">
+<div class="node-head" style="color:var(--purple)"><div class="dot" style="background:var(--purple)"></div>PIPELINE.PY — Parser</div>
+<div class="node-body" style="display:flex;flex-direction:column">
+<textarea id="f-pipeline" class="code" style="flex:1;min-height:0"></textarea>
+</div>
+</div>
+
+<div class="node" id="n-ghost" style="left:740px;top:60px;width:260px;height:260px;border-color:var(--cyan)">
+<div class="node-head" style="color:var(--cyan)"><div class="dot" style="background:var(--cyan)"></div>GHOSTS (Blue Notes)</div>
+<div class="node-body">
+<div class="fl"><label>Enabled</label><input type="checkbox" id="f-ghost_enabled" checked/></div>
+<div class="fl"><label>Max Ghosts</label><input type="range" id="f-ghost_max" min="1" max="20" step="1" value="3"/><span class="vl" id="v-ghost_max">3</span></div>
+<div class="fl"><label>Max Age</label><input type="range" id="f-ghost_max_age" min="1" max="20" step="1" value="3"/><span class="vl" id="v-ghost_max_age">3</span></div>
+<div class="fl"><label>Opacity</label><input type="range" id="f-ghost_opacity_base" min="0" max="1" step="0.01" value="0.22"/><span class="vl" id="v-ghost_opacity_base">0.22</span></div>
+<div class="fl"><label>Decay</label><input type="range" id="f-ghost_opacity_decay" min="0" max="1" step="0.01" value="0.32"/><span class="vl" id="v-ghost_opacity_decay">0.32</span></div>
+<div class="fl"><label>Edge Glow</label><input type="checkbox" id="f-ghost_edge_glow" checked/></div>
+<div class="fl"><label>Border</label><input type="color" id="f-ghost_border_color" value="#00ccff"/><input type="range" id="f-ghost_border_width" min="1" max="15" step="0.5" value="2"/><span class="vl" id="v-ghost_border_width">2.0</span></div>
+<div class="fl"><label>Dash</label><input type="range" id="f-ghost_dash_on" min="1" max="30" step="1" value="12"/><span class="vl" id="v-ghost_dash_on">12</span>/<input type="range" id="f-ghost_dash_off" min="1" max="30" step="1" value="5"/><span class="vl" id="v-ghost_dash_off">5</span></div>
+<div class="fl"><label>Label</label><input type="range" id="f-ghost_label_font_size" min="6" max="24" step="1" value="9"/><span class="vl" id="v-ghost_label_font_size">9</span><input type="color" id="f-ghost_label_bg_color" value="#0066cc"/></div>
+</div>
+</div>
+
+<div class="node" id="n-exec" style="left:740px;top:340px;width:260px;height:260px;border-color:var(--err)">
+<div class="node-head" style="color:var(--err)"><div class="dot" style="background:var(--err)"></div>EXECUTE ACTIONS</div>
+<div class="node-body">
+<div class="fl"><label>Physical</label><input type="checkbox" id="f-physical_execution" checked/></div>
+<div class="fl"><label>Delay (s)</label><input type="range" id="f-action_delay_seconds" min="0" max="1" step="0.01" value="0.15"/><span class="vl" id="v-action_delay_seconds">0.15</span></div>
+<div class="fl"><label>Drag Steps</label><input type="range" id="f-drag_duration_steps" min="1" max="100" step="1" value="25"/><span class="vl" id="v-drag_duration_steps">25</span></div>
+<div class="fl"><label>Step Delay</label><input type="range" id="f-drag_step_delay" min="0" max="0.1" step="0.001" value="0.008"/><span class="vl" id="v-drag_step_delay">0.008</span></div>
+</div>
+</div>
+
+<div class="node" id="n-heat" style="left:1030px;top:340px;width:250px;height:220px;border-color:var(--accent2)">
+<div class="node-head" style="color:var(--accent2)"><div class="dot" style="background:var(--accent2)"></div>HEAT (Orange Shapes)</div>
+<div class="node-body">
+<div class="fl"><label>Enabled</label><input type="checkbox" id="f-heat_enabled" checked/></div>
+<div class="fl"><label>Radius</label><input type="range" id="f-heat_radius_scale" min="0.005" max="0.5" step="0.005" value="0.02"/><span class="vl" id="v-heat_radius_scale">0.020</span></div>
+<div class="fl"><label>Drag Steps</label><input type="range" id="f-heat_drag_steps" min="1" max="40" step="1" value="16"/><span class="vl" id="v-heat_drag_steps">16</span></div>
+<div class="fl"><label>Trail Turns</label><input type="range" id="f-heat_trail_turns" min="1" max="10" step="1" value="3"/><span class="vl" id="v-heat_trail_turns">3</span></div>
+<div class="fl"><label>Shrink</label><input type="range" id="f-heat_trail_shrink" min="0.1" max="1" step="0.01" value="0.82"/><span class="vl" id="v-heat_trail_shrink">0.82</span></div>
+</div>
+</div>
+
+<div class="node" id="n-capture" style="left:1030px;top:60px;width:250px;height:260px;border-color:var(--accent)">
+<div class="node-head" style="color:var(--accent)"><div class="dot" style="background:var(--accent)"></div>SCREEN CAPTURE</div>
+<div class="node-body">
+<div class="fl"><label>Crop X1</label><input type="range" id="f-crop_x1" min="0" max="1000" step="1" value="78"/><span class="vl" id="v-crop_x1">78</span></div>
+<div class="fl"><label>Crop Y1</label><input type="range" id="f-crop_y1" min="0" max="1000" step="1" value="194"/><span class="vl" id="v-crop_y1">194</span></div>
+<div class="fl"><label>Crop X2</label><input type="range" id="f-crop_x2" min="0" max="1000" step="1" value="261"/><span class="vl" id="v-crop_x2">261</span></div>
+<div class="fl"><label>Crop Y2</label><input type="range" id="f-crop_y2" min="0" max="1000" step="1" value="645"/><span class="vl" id="v-crop_y2">645</span></div>
+<div class="fl"><label>Size</label><input type="number" id="f-capture_width" value="640" style="width:50px"/>x<input type="number" id="f-capture_height" value="640" style="width:50px"/></div>
+<div class="fl"><label>Scale %</label><input type="number" id="f-capture_scale_percent" value="100" style="width:50px"/></div>
+<div class="fl"><label>Delay (s)</label><input type="number" id="f-capture_delay" value="1.8" step="0.1" style="width:60px"/></div>
+</div>
+</div>
+
+<div class="node" id="n-vlm" style="left:1310px;top:60px;width:260px;height:260px;border-color:var(--green)">
+<div class="node-head" style="color:var(--green)"><div class="dot" style="background:var(--green)"></div>VLM API CALL</div>
+<div class="node-body">
+<div class="fl"><label>URL</label><input type="text" id="f-api_url" value=""/></div>
+<div class="fl"><label>Model</label><input type="text" id="f-model" value=""/></div>
+<div class="fl"><label>Temp</label><input type="range" id="f-temperature" min="0" max="2" step="0.05" value="0.5"/><span class="vl" id="v-temperature">0.50</span></div>
+<div class="fl"><label>Top P</label><input type="range" id="f-top_p" min="0" max="1" step="0.05" value="0.8"/><span class="vl" id="v-top_p">0.80</span></div>
+<div class="fl"><label>Tokens</label><input type="range" id="f-max_tokens" min="100" max="2000" step="50" value="400"/><span class="vl" id="v-max_tokens">400</span></div>
+</div>
+</div>
+
+<div class="node" id="n-server" style="left:1310px;top:340px;width:260px;height:260px;border-color:var(--text-dim)">
+<div class="node-head" style="color:var(--text-mid)"><div class="dot" style="background:var(--text-dim)"></div>SERVER & LOGGING</div>
+<div class="node-body">
+<div class="fl"><label>Host</label><input type="text" id="f-host" value="127.0.0.1"/></div>
+<div class="fl"><label>Port</label><input type="number" id="f-port" value="1234"/></div>
+<div class="fl"><label>Log Level</label><input type="text" id="f-log_level" value="INFO"/></div>
+<div class="fl"><label>Log File</label><input type="checkbox" id="f-log_to_file" checked/></div>
+<div class="fl"><label>Runs Dir</label><input type="text" id="f-runs_dir" value="runs"/></div>
+<div class="fl"><label>Layout</label><input type="text" id="f-log_layout" value="flat"/></div>
+</div>
+</div>
+
+</div>
+<div class="toast" id="toast"></div>
+<script type="module">
+'use strict';
+function $(id){return document.getElementById(id)}
+let toastTimer=0;
+function toast(msg,isErr=false){
+const t=$('toast');
+t.textContent=msg;
+t.className=isErr?'toast err-toast show':'toast show';
+clearTimeout(toastTimer);
+toastTimer=setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+const sliders=[
+['temperature','v-temperature',v=>v.toFixed(2)],
+['top_p','v-top_p',v=>v.toFixed(2)],
+['max_tokens','v-max_tokens',v=>String(Math.round(v))],
+['crop_x1','v-crop_x1',v=>String(Math.round(v))],
+['crop_y1','v-crop_y1',v=>String(Math.round(v))],
+['crop_x2','v-crop_x2',v=>String(Math.round(v))],
+['crop_y2','v-crop_y2',v=>String(Math.round(v))],
+['action_delay_seconds','v-action_delay_seconds',v=>v.toFixed(2)],
+['drag_duration_steps','v-drag_duration_steps',v=>String(Math.round(v))],
+['drag_step_delay','v-drag_step_delay',v=>v.toFixed(3)],
+['ghost_max','v-ghost_max',v=>String(Math.round(v))],
+['ghost_max_age','v-ghost_max_age',v=>String(Math.round(v))],
+['ghost_opacity_base','v-ghost_opacity_base',v=>v.toFixed(2)],
+['ghost_opacity_decay','v-ghost_opacity_decay',v=>v.toFixed(2)],
+['ghost_border_width','v-ghost_border_width',v=>v.toFixed(1)],
+['ghost_dash_on','v-ghost_dash_on',v=>String(Math.round(v))],
+['ghost_dash_off','v-ghost_dash_off',v=>String(Math.round(v))],
+['ghost_label_font_size','v-ghost_label_font_size',v=>String(Math.round(v))],
+['heat_radius_scale','v-heat_radius_scale',v=>v.toFixed(3)],
+['heat_drag_steps','v-heat_drag_steps',v=>String(Math.round(v))],
+['heat_trail_turns','v-heat_trail_turns',v=>String(Math.round(v))],
+['heat_trail_shrink','v-heat_trail_shrink',v=>v.toFixed(2)],
+];
+for(const[name,valId,fmt]of sliders){
+const inp=$('f-'+name);const val=$(valId);
+if(inp&&val)inp.addEventListener('input',()=>{val.textContent=fmt(parseFloat(inp.value))});
+}
+
+function collectConfig(){
+return{
+host:$('f-host').value,port:parseInt($('f-port').value)||1234,
+log_level:$('f-log_level').value,log_to_file:$('f-log_to_file').checked,
+runs_dir:$('f-runs_dir').value,log_layout:$('f-log_layout').value,
+api_url:$('f-api_url').value,model:$('f-model').value,
+temperature:parseFloat($('f-temperature').value),top_p:parseFloat($('f-top_p').value),
+max_tokens:parseInt($('f-max_tokens').value),
+system_prompt:$('f-system_prompt').value,boot_vlm_output:$('f-boot_vlm_output').value,
+capture_crop:{x1:parseInt($('f-crop_x1').value),y1:parseInt($('f-crop_y1').value),x2:parseInt($('f-crop_x2').value),y2:parseInt($('f-crop_y2').value)},
+capture_width:parseInt($('f-capture_width').value),capture_height:parseInt($('f-capture_height').value),
+capture_scale_percent:parseInt($('f-capture_scale_percent').value),capture_delay:parseFloat($('f-capture_delay').value),
+boot_enabled:$('f-boot_enabled').checked,physical_execution:$('f-physical_execution').checked,
+action_delay_seconds:parseFloat($('f-action_delay_seconds').value),
+drag_duration_steps:parseInt($('f-drag_duration_steps').value),drag_step_delay:parseFloat($('f-drag_step_delay').value),
+ghost_max:parseInt($('f-ghost_max').value),ghost_max_age:parseInt($('f-ghost_max_age').value),
+ui:{
+executed_heat:{enabled:$('f-heat_enabled').checked,radius_scale:parseFloat($('f-heat_radius_scale').value),drag_steps:parseInt($('f-heat_drag_steps').value),trail_turns:parseInt($('f-heat_trail_turns').value),trail_shrink:parseFloat($('f-heat_trail_shrink').value)},
+ghosts:{enabled:$('f-ghost_enabled').checked,opacity_base:parseFloat($('f-ghost_opacity_base').value),opacity_decay:parseFloat($('f-ghost_opacity_decay').value),edge_glow:$('f-ghost_edge_glow').checked,border_color:$('f-ghost_border_color').value,border_width:parseFloat($('f-ghost_border_width').value),dash_on:parseInt($('f-ghost_dash_on').value),dash_off:parseInt($('f-ghost_dash_off').value),label_font_size:parseInt($('f-ghost_label_font_size').value),label_bg_color:$('f-ghost_label_bg_color').value}
+}
+};
+}
+
+function applyConfig(cfg){
+$('f-host').value=cfg.host||'127.0.0.1';$('f-port').value=cfg.port||1234;
+$('f-log_level').value=cfg.log_level||'INFO';$('f-log_to_file').checked=cfg.log_to_file!==false;
+$('f-runs_dir').value=cfg.runs_dir||'runs';$('f-log_layout').value=cfg.log_layout||'flat';
+$('f-api_url').value=cfg.api_url||'';$('f-model').value=cfg.model||'';
+$('f-temperature').value=cfg.temperature??0.5;$('f-top_p').value=cfg.top_p??0.8;$('f-max_tokens').value=cfg.max_tokens??400;
+$('f-system_prompt').value=cfg.system_prompt||'';$('f-boot_vlm_output').value=cfg.boot_vlm_output||'';
+const cc=cfg.capture_crop||{};
+$('f-crop_x1').value=cc.x1??0;$('f-crop_y1').value=cc.y1??0;$('f-crop_x2').value=cc.x2??1000;$('f-crop_y2').value=cc.y2??1000;
+$('f-capture_width').value=cfg.capture_width??640;$('f-capture_height').value=cfg.capture_height??640;
+$('f-capture_scale_percent').value=cfg.capture_scale_percent??100;$('f-capture_delay').value=cfg.capture_delay??0;
+$('f-boot_enabled').checked=cfg.boot_enabled!==false;$('f-physical_execution').checked=cfg.physical_execution!==false;
+$('f-action_delay_seconds').value=cfg.action_delay_seconds??0.15;
+$('f-drag_duration_steps').value=cfg.drag_duration_steps??25;$('f-drag_step_delay').value=cfg.drag_step_delay??0.008;
+$('f-ghost_max').value=cfg.ghost_max??3;$('f-ghost_max_age').value=cfg.ghost_max_age??3;
+const uh=cfg.ui?.executed_heat||{};
+$('f-heat_enabled').checked=uh.enabled!==false;$('f-heat_radius_scale').value=uh.radius_scale??0.02;
+$('f-heat_drag_steps').value=uh.drag_steps??16;$('f-heat_trail_turns').value=uh.trail_turns??3;$('f-heat_trail_shrink').value=uh.trail_shrink??0.82;
+const ug=cfg.ui?.ghosts||{};
+$('f-ghost_enabled').checked=ug.enabled!==false;$('f-ghost_opacity_base').value=ug.opacity_base??0.22;
+$('f-ghost_opacity_decay').value=ug.opacity_decay??0.32;$('f-ghost_edge_glow').checked=ug.edge_glow!==false;
+$('f-ghost_border_color').value=ug.border_color||'#00ccff';$('f-ghost_border_width').value=ug.border_width??2;
+$('f-ghost_dash_on').value=ug.dash_on??12;$('f-ghost_dash_off').value=ug.dash_off??5;
+$('f-ghost_label_font_size').value=ug.label_font_size??9;$('f-ghost_label_bg_color').value=ug.label_bg_color||'#0066cc';
+for(const[name,valId,fmt]of sliders){
+const inp=$('f-'+name);const val=$(valId);
+if(inp&&val)val.textContent=fmt(parseFloat(inp.value));
+}
+}
+
+function drawArrows(){
+const svg=$('arrows');
+while(svg.children.length>1)svg.removeChild(svg.lastChild);
+const conns=[
+['n-boot','n-pipeline'],['n-prompt','n-pipeline'],['n-pipeline','n-ghost'],
+['n-pipeline','n-exec'],['n-pipeline','n-heat'],['n-exec','n-capture'],
+['n-capture','n-vlm'],['n-vlm','n-pipeline'],
+];
+for(const[fromId,toId]of conns){
+const f=$(fromId);const t=$(toId);
+if(!f||!t)continue;
+const fr=f.getBoundingClientRect();const tr=t.getBoundingClientRect();
+const board=$('board').getBoundingClientRect();
+const fx=fr.right-board.left;const fy=fr.top+fr.height/2-board.top;
+const tx=tr.left-board.left;const ty=tr.top+tr.height/2-board.top;
+const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+line.setAttribute('x1',fx);line.setAttribute('y1',fy);
+line.setAttribute('x2',tx);line.setAttribute('y2',ty);
+line.setAttribute('stroke','#4a9eff');line.setAttribute('stroke-width','1.5');
+line.setAttribute('stroke-dasharray','6,4');line.setAttribute('marker-end','url(#ah)');
+svg.appendChild(line);
+}
+}
+
+function updateNote(msg){$('status-note').textContent=msg}
+
+async function loadAll(){
+updateNote('Loading from server...');
+try{
+const[cfgR,pipR]=await Promise.all([fetch('/config_full'),fetch('/pipeline_source')]);
+if(!cfgR.ok||!pipR.ok){updateNote('Load failed: config='+cfgR.status+' pipeline='+pipR.status);toast('Load failed',true);return}
+const cfg=await cfgR.json();
+const pip=await pipR.json();
+applyConfig(cfg);
+$('f-pipeline').value=pip.source||'';
+updateNote('Loaded. boot_enabled='+cfg.boot_enabled+' | Edit settings, then Save All, then Start Loop.');
+toast('Loaded from server');
+}catch(e){updateNote('Load error: '+e);toast('Load failed: '+e,true)}
+drawArrows();
+}
+
+$('btn-save').addEventListener('click',async()=>{
+updateNote('Saving...');
+try{
+const cfg=collectConfig();
+const[cr,pr]=await Promise.all([
+fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)}),
+fetch('/save_pipeline',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:$('f-pipeline').value})})
+]);
+const cj=await cr.json();const pj=await pr.json();
+if(cj.ok&&pj.ok){
+toast('All saved to server');
+updateNote('Saved. VLM/capture/UI params active now. Server/logging changes need restart. Pipeline code needs restart.');
+}else{
+toast('Save error: config='+cj.ok+' pipeline='+pj.ok,true);
+updateNote('Save partial failure.');
+}
+}catch(e){toast('Save failed: '+e,true);updateNote('Save error: '+e)}
+});
+
+$('btn-export').addEventListener('click',async()=>{
+const cfg=collectConfig();
+const cfgJson=JSON.stringify(cfg,null,2);
+const pipSrc=$('f-pipeline').value;
+const ts=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+function download(name,content,type){
+const blob=new Blob([content],{type});
+const a=document.createElement('a');
+a.href=URL.createObjectURL(blob);
+a.download=name;
+a.click();
+URL.revokeObjectURL(a.href);
+}
+download('config_backup_'+ts+'.json',cfgJson,'application/json');
+await new Promise(r=>setTimeout(r,300));
+download('pipeline_backup_'+ts+'.py',pipSrc,'text/x-python');
+toast('Exported backup copies');
+});
+
+$('btn-start').addEventListener('click',async()=>{
+const boot=$('f-boot_vlm_output').value;
+if(!boot.trim()){toast('Boot VLM Output is empty — fill it first',true);return}
+updateNote('Injecting boot output to start the loop...');
+try{
+const r=await fetch('/inject',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vlm_text:boot})});
+const j=await r.json();
+if(j.ok){
+toast('Loop started!');
+updateNote('Loop running. Switch to the panel tab to monitor. URL: /');
+}else{
+toast('Start failed: '+(j.err||'unknown'),true);
+updateNote('Start failed: '+(j.err||''));
+}
+}catch(e){toast('Start failed: '+e,true);updateNote('Start error: '+e)}
+});
+
+$('btn-reload').addEventListener('click',loadAll);
+
+window.addEventListener('resize',drawArrows);
+loadAll();
+</script>
+</body>
+</html>
